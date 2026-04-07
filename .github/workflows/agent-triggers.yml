@@ -1,0 +1,31 @@
+name: Agent Triggers
+
+on:
+  issues:
+    types: [assigned]
+  pull_request:
+    types: [opened, ready_for_review]
+
+jobs:
+  notify-orchestrator:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send event to orchestrator webhook
+        run: |
+          if [ "${{ github.event_name }}" = "issues" ]; then
+            PAYLOAD=$(jq -n \
+              --arg action "${{ github.event.action }}" \
+              --argjson issue '${{ toJson(github.event.issue) }}' \
+              --argjson assignee '${{ toJson(github.event.assignee) }}' \
+              '{event: "issues", payload: {action: $action, issue: $issue, assignee: $assignee}}')
+          else
+            PAYLOAD=$(jq -n \
+              --arg action "${{ github.event.action }}" \
+              --argjson pr '${{ toJson(github.event.pull_request) }}' \
+              '{event: "pull_request", payload: {action: $action, pull_request: $pr}}')
+          fi
+
+          curl -s -f -X POST "${{ secrets.VPS_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.WEBHOOK_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
